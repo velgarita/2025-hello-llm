@@ -4,9 +4,23 @@ Laboratory work.
 Working with Large Language Models.
 """
 
+from pathlib import Path
+
 # pylint: disable=too-few-public-methods, undefined-variable, too-many-arguments, super-init-not-called
 from typing import Iterable, Sequence
 
+import pandas as pd
+import torch
+from datasets import load_dataset
+from pandas import DataFrame
+from torch.utils.data import Dataset
+
+from core_utils.llm.llm_pipeline import AbstractLLMPipeline
+from core_utils.llm.metrics import Metrics
+from core_utils.llm.raw_data_importer import AbstractRawDataImporter
+from core_utils.llm.raw_data_preprocessor import AbstractRawDataPreprocessor
+from core_utils.llm.task_evaluator import AbstractTaskEvaluator
+from core_utils.llm.time_decorator import report_time
 
 
 class RawDataImporter(AbstractRawDataImporter):
@@ -22,6 +36,13 @@ class RawDataImporter(AbstractRawDataImporter):
         Raises:
             TypeError: In case of downloaded dataset is not pd.DataFrame
         """
+        if self._hf_version:
+            self._raw_data = load_dataset(self._hf_name, self._hf_version, split='test').to_pandas()
+        else:
+            self._raw_data = load_dataset(self._hf_name, split='test').to_pandas()
+
+        if not isinstance(self._raw_data, pd.DataFrame):
+            raise TypeError('The downloaded dataset is not pd.DataFrame')
 
 
 class RawDataPreprocessor(AbstractRawDataPreprocessor):
@@ -36,6 +57,18 @@ class RawDataPreprocessor(AbstractRawDataPreprocessor):
         Returns:
             dict: Dataset key properties
         """
+        if self._raw_data is None:
+            raise ValueError('The data is empty')
+        
+        return {
+            'dataset_number_of_samples': len(self._raw_data),
+            'dataset_columns': len(self._raw_data.columns),
+            'dataset_duplicates': self._raw_data.duplicated(keep=False).sum(),
+            'dataset_empty_rows': self._raw_data.isna().any(axis=1).sum(),
+            'dataset_sample_min_len': min(len(article) for article in self._raw_data.dropna(how='any')['article']),
+            'dataset_sample_max_len': max(len(article) for article in self._raw_data.dropna(how='any')['article']),
+        }
+
 
     @report_time
     def transform(self) -> None:
