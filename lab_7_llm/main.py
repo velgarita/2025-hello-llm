@@ -20,7 +20,7 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from core_utils.llm.llm_pipeline import AbstractLLMPipeline
 from core_utils.llm.metrics import Metrics
 from core_utils.llm.raw_data_importer import AbstractRawDataImporter
-from core_utils.llm.raw_data_preprocessor import AbstractRawDataPreprocessor
+from core_utils.llm.raw_data_preprocessor import AbstractRawDataPreprocessor, ColumnNames
 from core_utils.llm.task_evaluator import AbstractTaskEvaluator
 from core_utils.llm.time_decorator import report_time
 
@@ -60,12 +60,12 @@ class RawDataPreprocessor(AbstractRawDataPreprocessor):
             raise ValueError('The data is empty')
         
         return {
-            'dataset_number_of_samples': len(self._raw_data),
-            'dataset_columns': len(self._raw_data.columns),
+            'dataset_number_of_samples': self._raw_data.shape[0],
+            'dataset_columns': self._raw_data.shape[1],
             'dataset_duplicates': self._raw_data.duplicated(keep=False).sum(),
             'dataset_empty_rows': self._raw_data.isna().any(axis=1).sum(),
-            'dataset_sample_min_len': min(len(article) for article in self._raw_data.dropna(how='any')['article']),
-            'dataset_sample_max_len': max(len(article) for article in self._raw_data.dropna(how='any')['article']),
+            'dataset_sample_min_len': self._raw_data.dropna(how='any')['article'].str.len().min(),
+            'dataset_sample_max_len': self._raw_data.dropna(how='any')['article'].str.len().max(),
         }
 
 
@@ -76,9 +76,9 @@ class RawDataPreprocessor(AbstractRawDataPreprocessor):
         """
         processed_data = self._raw_data.drop(columns=['id'])
         self._data = (processed_data
-                  .rename(columns={'article': 'source', 'highlights': 'target'})
+                  .rename(columns={'article': ColumnNames.SOURCE, 'highlights': ColumnNames.TARGET})
                   .drop_duplicates()
-                  .assign(source=lambda x: x['source'].str.replace('\(CNN\)', '', regex=True))
+                  .assign(source=lambda x: x[ColumnNames.SOURCE].str.replace('\(CNN\)', '', regex=True))
                   .reset_index(drop=True))
 
 
@@ -86,7 +86,6 @@ class TaskDataset(Dataset):
     """
     A class that converts pd.DataFrame to Dataset and works with it.
     """
-
 
     def __init__(self, data: pd.DataFrame) -> None:
         """
@@ -107,7 +106,6 @@ class TaskDataset(Dataset):
         """
         return len(self._data)
     
-
     def __getitem__(self, index: int) -> tuple[str, ...]:
         """
         Retrieve an item from the dataset by index.
@@ -120,7 +118,6 @@ class TaskDataset(Dataset):
         """
         return tuple(self._data.iloc[index])
     
-
     @property
     def data(self) -> DataFrame:
         """
@@ -157,7 +154,6 @@ class LLMPipeline(AbstractLLMPipeline):
         self._max_length = max_length
         self._batch_size = batch_size
         self._device = device
-
 
     def analyze_model(self) -> dict:
         """
