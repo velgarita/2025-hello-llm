@@ -61,14 +61,16 @@ class RawDataPreprocessor(AbstractRawDataPreprocessor):
         """
         if self._raw_data is None:
             raise ValueError('The data is empty')
-        
+
+        text_lengths = self._raw_data.dropna(how='any')['text'].str.len()
+
         return {
             'dataset_number_of_samples': self._raw_data.shape[0],
-            'dataset_columns': self._raw_data.shape[1],
+            'dataset_columns': len(self._raw_data.columns),
             'dataset_duplicates': self._raw_data.duplicated(keep=False).sum(),
             'dataset_empty_rows': self._raw_data.isna().any(axis=1).sum(),
-            'dataset_sample_min_len': self._raw_data.dropna(how='any')['text'].str.len().min(),
-            'dataset_sample_max_len': self._raw_data.dropna(how='any')['text'].str.len().max(),
+            'dataset_sample_min_len': text_lengths.min(),
+            'dataset_sample_max_len': text_lengths.max(),
         }
 
     @report_time
@@ -221,9 +223,6 @@ class LLMPipeline(AbstractLLMPipeline):
             "attention_mask": attention_mask,
         }
 
-        if not isinstance(self._model, Module):
-            raise ValueError("The model has incompatible type")
-
         model_stats = summary(
             self._model,
             input_data=tokens,
@@ -281,7 +280,7 @@ class LLMPipeline(AbstractLLMPipeline):
             texts = list(batch[0])
             samples = [(text,) for text in texts]
             preds = self._infer_batch(samples)
-            targets.extend(list(batch[1]))
+            targets.extend([int(target) for target in batch[1]])
             predictions.extend(preds)
 
         return pd.DataFrame({"target": targets, "predictions": predictions})
@@ -351,15 +350,7 @@ class TaskEvaluator(AbstractTaskEvaluator):
         targets = predictions_df['target'].tolist()
 
         predictions = [int(p) for p in predictions]
-
-        cleaned_targets = []
-        for ref in targets:
-            ref_str = str(ref)
-            if 'tensor(' in ref_str:
-                raw_value = ref_str.replace('tensor(', '').split(',')[0].replace(')', '').strip()
-                cleaned_targets.append(int(float(raw_value)))
-            else:
-                cleaned_targets.append(int(float(ref_str)))
+        cleaned_targets = [int(ref) for ref in targets]
 
         result = {}
 
