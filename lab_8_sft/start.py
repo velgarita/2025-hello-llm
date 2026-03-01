@@ -24,7 +24,7 @@ def main() -> None:
     """
     settings_path = Path(__file__).parent / 'settings.json'
 
-    with open(settings_path, 'r', encoding='utf-8') as file:
+    with settings_path.open('r', encoding='utf-8') as file:
         settings = json.load(file)
     
     name = settings['parameters']['dataset']

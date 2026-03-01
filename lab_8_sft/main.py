@@ -313,8 +313,12 @@ class LLMPipeline(AbstractLLMPipeline):
             return_tensors='pt'
         ).to(self._device)
 
-        logits = self._model(**inputs).logits
-        predictions = torch.argmax(logits, dim=1).tolist()
+        self._model.eval()
+
+        with torch.no_grad():
+            logits = self._model(**inputs).logits
+            predictions = torch.argmax(logits, dim=1).tolist()
+            
         return [str(prediction) for prediction in predictions]
 
 
@@ -349,8 +353,8 @@ class TaskEvaluator(AbstractTaskEvaluator):
         predictions = predictions_df['predictions'].tolist()
         targets = predictions_df['target'].tolist()
 
-        predictions = [int(p) for p in predictions]
-        cleaned_targets = [int(ref) for ref in targets]
+        predictions = list(map(int, predictions))
+        cleaned_targets = list(map(int, targets))
 
         result = {}
 
